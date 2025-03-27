@@ -692,7 +692,7 @@
                 document.body.appendChild(pdfContent);
                 
                 // Converti le immagini in URL data
-                const images = pdfContent.querySelectorAll('img');
+              /*  const images = pdfContent.querySelectorAll('img');
                 for (let img of images) {
                     try {
                         const response = await fetch(img.src);
@@ -708,7 +708,35 @@
                     } catch (err) {
                         console.warn('Impossibile convertire l\'immagine:', err);
                     }
-                }
+                } */
+
+                // Inserisci manualmente le immagini selezionate
+const selectedImages = articleData.images.filter(img => img.selected);
+for (let i = 0; i < selectedImages.length; i++) {
+    try {
+        const response = await fetch(selectedImages[i].src, { mode: 'cors', cache: 'no-cache' });
+        if (!response.ok) throw new Error('Impossibile scaricare l\'immagine');
+        const blob = await response.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+        
+        // Trova un punto adatto per inserire l'immagine
+        const paragraphs = pdfContent.querySelectorAll('p');
+        if (paragraphs.length > i) {
+            const imgElement = document.createElement('img');
+            imgElement.src = dataUrl;
+            imgElement.style.maxWidth = '100%';
+            imgElement.style.margin = '10px 0';
+            paragraphs[i].after(imgElement);
+        }
+    } catch (err) {
+        console.error('Errore nel caricamento dell\'immagine:', err);
+    }
+}
                 
                 // Genera il PDF
                 const { jsPDF } = window.jspdf;
@@ -859,14 +887,40 @@
                 contentHtml += '  <hr/>\n';
                 
                 // Sostituisci le immagini con i riferimenti locali
-                let contentWithImages = articleData.content;
+              /*  let contentWithImages = articleData.content;
                 for (let i = 0; i < selectedImages.length; i++) {
                     const imgFileName = `image_${i + 1}.jpg`;
                     contentWithImages = contentWithImages.replace(
                         /<\/p>(?![^<]*<\/div>)/,
                         `</p><img src="${imgFileName}" alt="Immagine ${i+1}" />`
                     );
-                }
+                } */
+
+// Inserisci le immagini in modo più affidabile
+let contentWithImages = articleData.content;
+let insertionPoint = 0;
+
+// Inserisci ogni immagine dopo un paragrafo diverso
+for (let i = 0; i < selectedImages.length; i++) {
+    const imgFileName = `image_${i + 1}.jpg`;
+    // Trova la posizione del tag </p> dopo l'ultimo punto di inserimento
+    const nextParagraphEnd = contentWithImages.indexOf('</p>', insertionPoint);
+    if (nextParagraphEnd !== -1) {
+        // Inserisci l'immagine dopo questo paragrafo
+        const beforeInsert = contentWithImages.substring(0, nextParagraphEnd + 4);
+        const afterInsert = contentWithImages.substring(nextParagraphEnd + 4);
+        contentWithImages = beforeInsert + 
+            `<p><img src="${imgFileName}" alt="Immagine ${i+1}" /></p>` + 
+            afterInsert;
+        
+        // Aggiorna il punto di inserimento
+        insertionPoint = nextParagraphEnd + 4 + 
+            `<p><img src="${imgFileName}" alt="Immagine ${i+1}" /></p>`.length;
+    } else {
+        // Se non ci sono più paragrafi, aggiungi l'immagine alla fine
+        contentWithImages += `<p><img src="${imgFileName}" alt="Immagine ${i+1}" /></p>`;
+    }
+}
                 
                 contentHtml += '  <div class="content">\n';
                 contentHtml += contentWithImages;
