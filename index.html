@@ -236,36 +236,38 @@
                 grid-template-columns: 1fr;
             }
         }
-
-        /* Stili per stampa PDF */
-        .pdf-container {
+        
+        /* Stili per il PDF nascosto */
+        #pdf-container {
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
             width: 210mm;
-            padding: 15mm;
-            margin: 0 auto;
-            font-family: Georgia, 'Times New Roman', Times, serif;
+            padding: 20mm;
             background-color: white;
+            font-family: Georgia, 'Times New Roman', Times, serif;
         }
         
         .pdf-title {
             font-size: 24pt;
             text-align: center;
-            margin-bottom: 1em;
+            margin-bottom: 10mm;
         }
         
         .pdf-subtitle {
             font-size: 12pt;
             text-align: center;
-            margin-bottom: 1em;
+            margin-bottom: 10mm;
             color: #666;
         }
         
         .pdf-divider {
             border-top: 1pt solid #ddd;
-            margin: 1em 0 2em 0;
+            margin: 5mm 0 10mm 0;
         }
         
         .pdf-content {
-            font-size: 12pt;
+            font-size: 11pt;
             text-align: justify;
             hyphens: auto;
             line-height: 1.5;
@@ -273,14 +275,18 @@
         
         .pdf-content p {
             text-indent: 1.5em;
-            margin-bottom: 0.8em;
+            margin-bottom: 5mm;
         }
         
         .pdf-content img {
-            max-width: 100%;
-            height: auto;
-            margin: 1em auto;
+            max-width: 170mm;
+            margin: 5mm auto;
             display: block;
+        }
+        
+        .pdf-page-break {
+            page-break-after: always;
+            break-after: page;
         }
     </style>
 </head>
@@ -369,6 +375,9 @@
         </div>
     </div>
     
+    <!-- Contenitore nascosto per generazione PDF -->
+    <div id="pdf-container" class="hidden"></div>
+    
     <script>
         // Memorizza i dati dell'articolo
         let articleData = {
@@ -396,6 +405,7 @@
         const exportPdfButton = document.getElementById('export-pdf-button');
         const exportEpubButton = document.getElementById('export-epub-button');
         const exportStatus = document.getElementById('export-status');
+        const pdfContainer = document.getElementById('pdf-container');
         
         // Gestione delle tab
         const tabs = document.querySelectorAll('.tab');
@@ -704,12 +714,15 @@
                 // Inserisci l'immagine dopo il primo paragrafo
                 const paragraphs = contentDiv.querySelectorAll('p');
                 if (paragraphs.length > 0) {
-                    for (let i = 0; i < selectedImages.length && i < paragraphs.length; i++) {
-                        const imgElement = document.createElement('img');
-                        imgElement.src = selectedImages[i].src;
-                        imgElement.alt = selectedImages[i].alt || '';
-                        
-                        paragraphs[i].insertAdjacentElement('afterend', imgElement);
+                    let imgIndex = 0;
+                    for (let i = 0; i < paragraphs.length && imgIndex < selectedImages.length; i++) {
+                        if (i % 3 === 1) { // Inserisci immagini ogni 3 paragrafi
+                            const imgElement = document.createElement('img');
+                            imgElement.src = selectedImages[imgIndex].src;
+                            imgElement.alt = selectedImages[imgIndex].alt || '';
+                            paragraphs[i].insertAdjacentElement('afterend', imgElement);
+                            imgIndex++;
+                        }
                     }
                 }
                 
@@ -742,6 +755,175 @@
         // Event listener per aggiornare l'anteprima
         updatePreviewButton.addEventListener('click', updatePreview);
         
+        // Funzione per creare il documento PDF
+        async function createPdfDoc() {
+            // Crea un nuovo documento PDF
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4',
+                compress: true
+            });
+            
+            // Imposta margini predefiniti
+            const margin = 20; // margine di 20mm su tutti i lati
+            const pageWidth = 210;
+            const pageHeight = 297;
+            const contentWidth = pageWidth - (margin * 2);
+            const contentHeight = pageHeight - (margin * 2);
+            
+            // Imposta i font
+            pdf.setFont('Georgia', 'normal');
+            
+            // Aggiungi il titolo
+            pdf.setFontSize(20);
+            pdf.text(articleData.title, pageWidth / 2, margin, { align: 'center' });
+            
+            // Aggiungi il sottotitolo
+            let yPosition = margin + 15;
+            
+            if (articleData.author || articleData.source) {
+                pdf.setFontSize(11);
+                let subtitle = '';
+                
+                if (articleData.author) {
+                    subtitle += `Di ${articleData.author}`;
+                }
+                
+                if (articleData.author && articleData.source) {
+                    subtitle += ' | ';
+                }
+                
+                if (articleData.source) {
+                    subtitle += `Fonte: ${articleData.source}`;
+                }
+                
+                pdf.text(subtitle, pageWidth / 2, yPosition, { align: 'center' });
+                yPosition += 5;
+            }
+            
+            // Aggiungi linea divisoria
+            pdf.setDrawColor(200, 200, 200);
+            pdf.line(margin, yPosition + 5, pageWidth - margin, yPosition + 5);
+            
+            yPosition += 15;
+            
+            // Ottieni il contenuto dell'articolo
+            const contentDiv = document.createElement('div');
+            contentDiv.innerHTML = articleData.content;
+            
+            // Ottieni le immagini selezionate
+            const selectedImages = articleData.images.filter(img => img.selected);
+            const imageDataUrls = [];
+            
+            // Carica le immagini come data URL
+            if (selectedImages.length > 0) {
+                for (const image of selectedImages) {
+                    try {
+                        const response = await fetch(image.src);
+                        const blob = await response.blob();
+                        const dataUrl = await blobToDataURL(blob);
+                        imageDataUrls.push(dataUrl);
+                    } catch (err) {
+                        console.warn('Impossibile caricare l\'immagine:', err);
+                        imageDataUrls.push(null);
+                    }
+                }
+            }
+            
+            // Estrai i paragrafi dal contenuto
+            const paragraphs = contentDiv.querySelectorAll('p');
+            
+            // Imposta lo stile per il testo
+            pdf.setFontSize(11);
+            pdf.setLineHeightFactor(1.5);
+            
+            // Aggiungi il contenuto
+            let imgIndex = 0;
+            
+            for (let i = 0; i < paragraphs.length; i++) {
+                const paragraph = paragraphs[i].textContent.trim();
+                
+                if (paragraph === '') continue;
+                
+                // Calcola la lunghezza del testo
+                const textLines = pdf.splitTextToSize(paragraph, contentWidth);
+                
+                // Verifica se c'è spazio sufficiente sulla pagina
+                if (yPosition + (textLines.length * 7) > pageHeight - margin) {
+                    pdf.addPage();
+                    yPosition = margin;
+                }
+                
+                // Aggiungi testo con indentazione al primo rigo
+                const firstLine = textLines[0];
+                pdf.text('    ' + firstLine, margin, yPosition);
+                yPosition += 7;
+                
+                // Aggiungi le linee rimanenti senza indentazione
+                for (let j = 1; j < textLines.length; j++) {
+                    pdf.text(textLines[j], margin, yPosition);
+                    yPosition += 7;
+                }
+                
+                // Aggiungi spazio dopo il paragrafo
+                yPosition += 3;
+                
+                // Inserisci un'immagine dopo alcuni paragrafi
+                if (i % 3 === 1 && imgIndex < imageDataUrls.length && imageDataUrls[imgIndex]) {
+                    // Verifica se c'è spazio sufficiente sulla pagina per l'immagine
+                    if (yPosition + 60 > pageHeight - margin) {
+                        pdf.addPage();
+                        yPosition = margin;
+                    }
+                    
+                    try {
+                        // Calcola dimensioni proporzionali dell'immagine
+                        const img = new Image();
+                        img.src = imageDataUrls[imgIndex];
+                        
+                        // Attendi che l'immagine sia caricata
+                        await new Promise((resolve) => {
+                            img.onload = resolve;
+                            img.onerror = resolve; // In caso di errore, continua
+                        });
+                        
+                        const imgWidth = contentWidth;
+                        const imgHeight = (img.height * imgWidth) / img.width;
+                        
+                        // Aggiungi l'immagine
+                        pdf.addImage(
+                            imageDataUrls[imgIndex],
+                            'JPEG',
+                            margin,
+                            yPosition,
+                            imgWidth,
+                            imgHeight
+                        );
+                        
+                        yPosition += imgHeight + 10;
+                    } catch (err) {
+                        console.warn('Errore nel posizionamento dell\'immagine:', err);
+                    }
+                    
+                    imgIndex++;
+                }
+            }
+            
+            return pdf;
+        }
+        
+        // Funzione per convertire Blob in Data URL
+        function blobToDataURL(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+        
         // Funzione per esportare in PDF
         exportPdfButton.addEventListener('click', async () => {
             try {
@@ -750,135 +932,8 @@
                 // Assicuriamoci che il contenuto sia aggiornato
                 updatePreview();
                 
-                // Ottieni le immagini selezionate
-                const selectedImages = articleData.images.filter(img => img.selected);
-                
-                // Crea una copia del contenuto dell'anteprima per il PDF
-                const pdfContent = document.createElement('div');
-                pdfContent.className = 'pdf-container';
-                pdfContent.innerHTML = `
-                    <div class="pdf-title">${articleData.title}</div>
-                    <div class="pdf-subtitle">
-                        ${articleData.author ? `Di ${articleData.author}` : ''}
-                        ${articleData.author && articleData.source ? ' | ' : ''}
-                        ${articleData.source ? `Fonte: ${articleData.source}` : ''}
-                    </div>
-                    <div class="pdf-divider"></div>
-                    <div class="pdf-content">
-                        ${articleData.content}
-                    </div>
-                `;
-                
-                // Aggiungi le immagini selezionate al contenuto PDF
-                if (selectedImages.length > 0) {
-                    const contentDiv = pdfContent.querySelector('.pdf-content');
-                    const paragraphs = contentDiv.querySelectorAll('p');
-                    
-                    if (paragraphs.length > 0) {
-                        for (let i = 0; i < selectedImages.length && i < paragraphs.length; i++) {
-                            // Crea un elemento immagine
-                            const imgElement = document.createElement('img');
-                            
-                            // Converti l'immagine in un data URL
-                            try {
-                                const response = await fetch(selectedImages[i].src);
-                                const blob = await response.blob();
-                                const reader = new FileReader();
-                                
-                                const dataUrl = await new Promise((resolve) => {
-                                    reader.onload = () => resolve(reader.result);
-                                    reader.readAsDataURL(blob);
-                                });
-                                
-                                imgElement.src = dataUrl;
-                                imgElement.alt = selectedImages[i].alt || '';
-                                
-                                // Inserisci l'immagine dopo il paragrafo
-                                paragraphs[i].insertAdjacentElement('afterend', imgElement);
-                            } catch (err) {
-                                console.warn('Impossibile convertire l\'immagine:', err);
-                            }
-                        }
-                    }
-                }
-                
-                // Appendi il contenuto PDF al corpo del documento per la conversione
-                document.body.appendChild(pdfContent);
-                
-                // Inizializza jsPDF
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF({
-                    orientation: 'portrait',
-                    unit: 'mm',
-                    format: 'a4'
-                });
-                
-                // Utilizza html2canvas per renderizzare il contenuto HTML in parti
-                // Questo risolve il problema del PDF troncato
-                const contentSections = [];
-                const contentHeight = pdfContent.offsetHeight;
-                const pageHeight = 297; // Altezza pagina A4 in mm
-                const pageWidth = 210; // Larghezza pagina A4 in mm
-                
-                // Funzione per renderizzare in un canvas
-                const renderToCanvas = async (element) => {
-                    return await html2canvas(element, {
-                        scale: 2, // Migliore qualità
-                        useCORS: true,
-                        allowTaint: true,
-                        logging: false
-                    });
-                };
-                
-                // Renderizza il contenuto completo in un canvas
-                const canvas = await renderToCanvas(pdfContent);
-                
-                // Calcola il fattore di scala per adattare la larghezza alla pagina PDF
-                const imgWidth = pdf.internal.pageSize.getWidth();
-                const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                
-                // Numero di pagine necessarie
-                const pagesCount = Math.ceil(imgHeight / pdf.internal.pageSize.getHeight());
-                
-                // Per ogni pagina, aggiungi la sezione appropriata dell'immagine
-                let heightLeft = imgHeight;
-                let position = 0;
-                let page = 0;
-                
-                while (heightLeft > 0) {
-                    // Aggiungi una nuova pagina se necessario
-                    if (page > 0) {
-                        pdf.addPage();
-                    }
-                    
-                    // Calcola la parte dell'immagine da mostrare
-                    const pageHeight = pdf.internal.pageSize.getHeight();
-                    const heightToDraw = Math.min(heightLeft, pageHeight);
-                    
-                    // Aggiungi la sezione dell'immagine alla pagina
-                    pdf.addImage(
-                        canvas.toDataURL('image/jpeg', 1.0), 
-                        'JPEG', 
-                        0, 
-                        position < 0 ? position : 0, // Posizione Y
-                        imgWidth, 
-                        imgHeight,
-                        null,
-                        'FAST',
-                        0,
-                        position < 0 ? -position / imgHeight * canvas.height : 0, // Clipping di inizio
-                        canvas.width,
-                        heightToDraw / imgHeight * canvas.height // Clipping di fine
-                    );
-                    
-                    // Aggiorna per la prossima pagina
-                    heightLeft -= heightToDraw;
-                    position -= heightToDraw;
-                    page++;
-                }
-                
-                // Rimuovi l'elemento temporaneo
-                document.body.removeChild(pdfContent);
+                // Crea il documento PDF
+                const pdf = await createPdfDoc();
                 
                 // Salva il PDF
                 pdf.save(`${articleData.title.substring(0, 30).replace(/[^\w]/g, '_')}.pdf`);
@@ -938,9 +993,30 @@
                     '    <item id="content" href="content.html" media-type="application/xhtml+xml"/>\n';
                 
                 // Aggiungi le immagini al manifest
+                let imageFilesPromises = [];
+                
                 for (let i = 0; i < selectedImages.length; i++) {
                     const imgFileName = `image_${i + 1}.jpg`;
                     imageItems += `    <item id="image${i+1}" href="${imgFileName}" media-type="image/jpeg"/>\n`;
+                    
+                    // Prepara il fetch delle immagini
+                    imageFilesPromises.push(
+                        fetch(selectedImages[i].src)
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error(`HTTP error! status: ${response.status}`);
+                                }
+                                return response.blob();
+                            })
+                            .then(blob => {
+                                oebps.file(imgFileName, blob);
+                                return imgFileName;
+                            })
+                            .catch(err => {
+                                console.warn(`Errore nel recupero dell'immagine ${i + 1}:`, err);
+                                return null;
+                            })
+                    );
                 }
                 
                 contentOpf += imageItems;
@@ -972,35 +1048,26 @@
                 
                 oebps.file("toc.ncx", tocNcx);
                 
-                // Prepara le immagini e il loro posizionamento nel contenuto
-                let contentWithImages = articleData.content;
+                // Attendi che tutte le immagini siano state scaricate
+                const imageFiles = await Promise.all(imageFilesPromises);
+                
+                // Prepara il contenuto HTML con le immagini
                 const contentDiv = document.createElement('div');
-                contentDiv.innerHTML = contentWithImages;
+                contentDiv.innerHTML = articleData.content;
                 const paragraphs = contentDiv.querySelectorAll('p');
                 
-                // Crea un array per salvare le promesse di fetch delle immagini
-                const fetchPromises = [];
-                
-                // Inserisci riferimenti alle immagini locali nel contenuto
-                if (paragraphs.length > 0 && selectedImages.length > 0) {
-                    for (let i = 0; i < selectedImages.length && i < paragraphs.length; i++) {
-                        const imgFileName = `image_${i + 1}.jpg`;
-                        const imgTag = `<img src="${imgFileName}" alt="Immagine ${i+1}" />`;
-                        
-                        // Inserisci il tag dell'immagine dopo il paragrafo
-                        paragraphs[i].insertAdjacentHTML('afterend', imgTag);
-                        
-                        // Aggiungi la promessa per recuperare l'immagine
-                        fetchPromises.push(
-                            fetch(selectedImages[i].src)
-                                .then(response => response.blob())
-                                .then(blob => {
-                                    oebps.file(imgFileName, blob);
-                                })
-                                .catch(err => {
-                                    console.warn('Impossibile aggiungere l\'immagine:', err);
-                                })
-                        );
+                if (paragraphs.length > 0) {
+                    let imgIndex = 0;
+                    
+                    for (let i = 0; i < paragraphs.length && imgIndex < imageFiles.length; i++) {
+                        if (i % 3 === 1 && imageFiles[imgIndex]) {
+                            const imgTag = document.createElement('img');
+                            imgTag.src = imageFiles[imgIndex];
+                            imgTag.alt = `Immagine ${imgIndex + 1}`;
+                            
+                            paragraphs[i].insertAdjacentElement('afterend', imgTag);
+                            imgIndex++;
+                        }
                     }
                 }
                 
@@ -1034,14 +1101,25 @@
                 
                 contentHtml += '  <hr/>\n';
                 contentHtml += '  <div class="content">\n';
-                contentHtml += contentDiv.innerHTML;
+                
+                // Modifica i riferimenti delle immagini
+                let modifiedContent = contentDiv.innerHTML;
+                
+                for (let i = 0; i < imageFiles.length; i++) {
+                    if (imageFiles[i]) {
+                        const imgFileName = `image_${i + 1}.jpg`;
+                        modifiedContent = modifiedContent.replace(
+                            new RegExp(imageFiles[i], 'g'),
+                            imgFileName
+                        );
+                    }
+                }
+                
+                contentHtml += modifiedContent;
                 contentHtml += '  </div>\n';
                 contentHtml += '</body>\n</html>';
                 
                 oebps.file("content.html", contentHtml);
-                
-                // Attendi che tutte le immagini siano state caricate e aggiunte
-                await Promise.all(fetchPromises);
                 
                 // Genera il file EPUB
                 const epubBlob = await zip.generateAsync({type: 'blob', mimeType: 'application/epub+zip'});
@@ -1087,6 +1165,3 @@
                 return c;
             });
         }
-    </script>
-</body>
-</html>
