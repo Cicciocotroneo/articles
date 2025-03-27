@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebArticle Extractor</title>
+    <!-- Phosphor Icons -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phosphor-icons/1.4.2/phosphor-icons.min.js"></script>
+    <!-- jsPDF per la generazione PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- html2canvas per catturare il contenuto per PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- JSZip e js-epub-maker per generazione EPUB -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #5b6b8d;
+            --background-color: #f8f9fa;
+            --card-color: #ffffff;
+            --text-color: #333333;
+            --border-color: #e0e0e0;
+            --accent-color: #7986cb;
+            --error-color: #e57373;
+            --success-color: #81c784;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1, h2, h3 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+        
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .card {
+            background-color: var(--card-color);
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        input, textarea {
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            flex-grow: 1;
+        }
+        
+        button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 15px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: var(--accent-color);
+        }
+        
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 0.9rem;
+        }
+        
+        .icon {
+            font-size: 1.2rem;
+        }
+        
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        
+        .status.error {
+            background-color: var(--error-color);
+            color: white;
+        }
+        
+        .status.success {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 15px;
+        }
+        
+        .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        
+        .tab.active {
+            border-bottom: 2px solid var(--primary-color);
+            color: var(--primary-color);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        #editor-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        #editor-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        #preview-container {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 20px;
+            min-height: 500px;
+            max-height: 800px;
+            overflow-y: auto;
+        }
+        
+        .preview-title {
+            font-family: Georgia, 'Times New Roman', Times, serif;
+            font-size: 1.8rem;
+            margin-bottom: 10px;
+        }
+        
+        .preview-subtitle {
+            font-size: 1rem;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        
+        .preview-divider {
+            border-top: 1px solid #ddd;
+            margin: 10px 0 20px 0;
+        }
+        
+        .preview-content {
+            font-family: Georgia, 'Times New Roman', Times, serif;
+            text-indent: 1.5em;
+            hyphens: auto;
+        }
+        
+        .preview-content p {
+            margin-bottom: 1em;
+        }
+        
+        .preview-content img {
+            max-width: 100%;
+            height: auto;
+            margin: 1em 0;
+        }
+        
+        #images-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .image-item {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+        
+        .image-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .image-checkbox {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            #editor-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="card">
+            <h1>WebArticle Extractor</h1>
+            
+            <div class="tabs">
+                <div class="tab active" data-tab="extract">Estrai</div>
+                <div class="tab" data-tab="edit">Modifica</div>
+                <div class="tab" data-tab="export">Esporta</div>
+            </div>
+            
+            <div id="status-message" class="status hidden"></div>
+            
+            <div id="extract-tab" class="tab-content active">
+                <div class="input-group">
+                    <input type="url" id="url-input" placeholder="Inserisci l'URL dell'articolo..." required>
+                    <button id="extract-button">
+                        <i class="ph-magnifying-glass icon"></i>
+                        Estrai
+                    </button>
+                </div>
+                <div id="loading-indicator" class="hidden">
+                    <p><i class="ph-spinner icon"></i> Estrazione in corso...</p>
+                </div>
+            </div>
+            
+            <div id="edit-tab" class="tab-content">
+                <div id="editor-container">
+                    <div id="editor-form">
+                        <div>
+                            <label for="title-input">Titolo</label>
+                            <input type="text" id="title-input">
+                        </div>
+                        
+                        <div>
+                            <label for="author-input">Autore</label>
+                            <input type="text" id="author-input">
+                        </div>
+                        
+                        <div>
+                            <label for="source-input">Fonte</label>
+                            <input type="text" id="source-input">
+                        </div>
+                        
+                        <div>
+                            <label for="source-url-input">URL Fonte</label>
+                            <input type="url" id="source-url-input">
+                        </div>
+                        
+                        <div>
+                            <label for="content-input">Contenuto</label>
+                            <textarea id="content-input" rows="15"></textarea>
+                        </div>
+                        
+                        <div>
+                            <label>Immagini</label>
+                            <div id="images-container"></div>
+                        </div>
+                        
+                        <button id="update-preview-button">
+                            <i class="ph-eye icon"></i>
+                            Aggiorna anteprima
+                        </button>
+                    </div>
+                    
+                    <div id="preview-container"></div>
+                </div>
+            </div>
+            
+            <div id="export-tab" class="tab-content">
+                <div class="toolbar">
+                    <button id="export-pdf-button">
+                        <i class="ph-file-pdf icon"></i>
+                        Esporta come PDF
+                    </button>
+                    <button id="export-epub-button">
+                        <i class="ph-book icon"></i>
+                        Esporta come EPUB
+                    </button>
+                </div>
+                <div id="export-status"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Memorizza i dati dell'articolo
+        let articleData = {
+            title: '',
+            author: '',
+            source: '',
+            sourceUrl: '',
+            content: '',
+            images: []
+        };
+        
+        // Elementi DOM
+        const urlInput = document.getElementById('url-input');
+        const extractButton = document.getElementById('extract-button');
+        const statusMessage = document.getElementById('status-message');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const titleInput = document.getElementById('title-input');
+        const authorInput = document.getElementById('author-input');
+        const sourceInput = document.getElementById('source-input');
+        const sourceUrlInput = document.getElementById('source-url-input');
+        const contentInput = document.getElementById('content-input');
+        const imagesContainer = document.getElementById('images-container');
+        const updatePreviewButton = document.getElementById('update-preview-button');
+        const previewContainer = document.getElementById('preview-container');
+        const exportPdfButton = document.getElementById('export-pdf-button');
+        const exportEpubButton = document.getElementById('export-epub-button');
+        const exportStatus = document.getElementById('export-status');
+        
+        // Gestione delle tab
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.getAttribute('data-tab');
+                
+                // Aggiorna le classi delle tab
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Aggiorna i contenuti delle tab
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === `${tabName}-tab`) {
+                        content.classList.add('active');
+                    }
+                });
+            });
+        });
+        
+        // Funzione per estrarre l'articolo
+        extractButton.addEventListener('click', async () => {
+            const url = urlInput.value.trim();
+            
+            if (!url) {
+                showStatus('Per favore, inserisci un URL valido.', 'error');
+                return;
+            }
+            
+            try {
+                statusMessage.classList.add('hidden');
+                loadingIndicator.classList.remove('hidden');
+                
+                // Utilizziamo un proxy CORS per aggirare le restrizioni di sicurezza
+                const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+                
+                const response = await fetch(proxyUrl);
+                if (!response.ok) {
+                    throw new Error('Errore durante il recupero della pagina web');
+                }
+                
+                const data = await response.json();
+                
+                // Crea un elemento DOM temporaneo per analizzare l'HTML
+                const tempEl = document.createElement('div');
+                tempEl.innerHTML = data.contents;
+                
+                // Estrai i dati dell'articolo
+                extractArticleData(tempEl, url);
+                
+                // Popola i campi del form di modifica
+                populateEditorForm();
+                
+                // Aggiorna l'anteprima
+                updatePreview();
+                
+                // Passa alla scheda di modifica
+                document.querySelector('[data-tab="edit"]').click();
+                
+                showStatus('Articolo estratto con successo!', 'success');
+            } catch (error) {
+                showStatus(`Errore: ${error.message}`, 'error');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        });
+        
+        // Funzione per estrarre i dati dell'articolo
+        function extractArticleData(domElement, sourceUrl) {
+            // Estrai il titolo
+            const potentialTitles = [
+                domElement.querySelector('h1'),
+                domElement.querySelector('meta[property="og:title"]'),
+                domElement.querySelector('meta[name="twitter:title"]'),
+                domElement.querySelector('title')
+            ];
+            
+            for (const titleElement of potentialTitles) {
+                if (titleElement) {
+                    articleData.title = titleElement.content || titleElement.textContent;
+                    if (articleData.title) break;
+                }
+            }
+            
+            // Estrai l'autore
+            const potentialAuthors = [
+                domElement.querySelector('meta[name="author"]'),
+                domElement.querySelector('meta[property="article:author"]'),
+                domElement.querySelector('a[rel="author"]'),
+                domElement.querySelector('.author'),
+                domElement.querySelector('[class*="author"]'),
+                domElement.querySelector('[itemprop="author"]')
+            ];
+            
+            for (const authorElement of potentialAuthors) {
+                if (authorElement) {
+                    articleData.author = authorElement.content || authorElement.textContent;
+                    if (articleData.author) break;
+                }
+            }
+            
+            // Estrai la fonte
+            const hostname = new URL(sourceUrl).hostname;
+            articleData.source = hostname.replace('www.', '');
+            articleData.sourceUrl = sourceUrl;
+            
+            // Estrai il contenuto
+            articleData.content = extractArticleContent(domElement);
+            
+            // Estrai le immagini
+            const images = domElement.querySelectorAll('article img, main img, [class*="content"] img, [class*="article"] img');
+            articleData.images = [];
+            
+            images.forEach(img => {
+                const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original');
+                if (src && !src.includes('data:image') && src.trim() !== '' && src.length > 10) {
+                    // Converte URL relativi a assoluti
+                    const absoluteSrc = new URL(src, sourceUrl).href;
+                    
+                    // Aggiungi solo immagini uniche
+                    if (!articleData.images.some(img => img.src === absoluteSrc)) {
+                        articleData.images.push({
+                            src: absoluteSrc,
+                            alt: img.alt || '',
+                            selected: true // Selected by default
+                        });
+                    }
+                }
+            });
+        }
+        
+        // Funzione per estrarre il contenuto dell'articolo
+        function extractArticleContent(domElement) {
+            // Strategia 1: Cerca elementi con tag semantici per articoli
+            let content = '';
+            
+            // Cerca l'elemento article
+            const articleElements = domElement.querySelectorAll('article');
+            if (articleElements.length > 0) {
+                // Prendi il primo elemento article
+                const mainArticle = articleElements[0];
+                content = cleanAndFormatContent(mainArticle);
+                if (content.trim().length > 100) {
+                    return content;
+                }
+            }
+            
+            // Strategia 2: Cerca contenuto nella sezione principale
+            const mainElements = domElement.querySelectorAll('main');
+            if (mainElements.length > 0) {
+                const mainContent = mainElements[0];
+                content = cleanAndFormatContent(mainContent);
+                if (content.trim().length > 100) {
+                    return content;
+                }
+            }
+            
+            // Strategia 3: Cerca div con classi o ID comuni per articoli
+            const potentialArticleContainers = domElement.querySelectorAll('div[class*="article"], div[class*="content"], div[class*="post"], div[id*="article"], div[id*="content"], div[id*="post"]');
+            if (potentialArticleContainers.length > 0) {
+                // Prendi il container più grande che è probabile contenga l'articolo
+                let largestContainer = potentialArticleContainers[0];
+                let maxLength = largestContainer.textContent.length;
+                
+                for (let i = 1; i < potentialArticleContainers.length; i++) {
+                    const currentLength = potentialArticleContainers[i].textContent.length;
+                    if (currentLength > maxLength) {
+                        maxLength = currentLength;
+                        largestContainer = potentialArticleContainers[i];
+                    }
+                }
+                
+                content = cleanAndFormatContent(largestContainer);
+                if (content.trim().length > 100) {
+                    return content;
+                }
+            }
+            
+            // Strategia 4: Cerca paragrafi lunghi
+            const paragraphs = domElement.querySelectorAll('p');
+            if (paragraphs.length > 0) {
+                // Filtra i paragrafi che sono probabilmente parte dell'articolo
+                const contentParagraphs = Array.from(paragraphs).filter(p => {
+                    const text = p.textContent.trim();
+                    return text.length > 50 && text.split(' ').length > 10;
+                });
+                
+                if (contentParagraphs.length > 0) {
+                    content = contentParagraphs.map(p => `<p>${p.textContent}</p>`).join('');
+                    return content;
+                }
+            }
+            
+            // Fallback: Ritorna tutto il contenuto testuale del corpo
+            return 'Nessun articolo identificato chiaramente.';
+        }
+        
+        // Funzione per pulire e formattare il contenuto dell'articolo
+        function cleanAndFormatContent(element) {
+            // Clona l'elemento per non modificare l'originale
+            const clone = element.cloneNode(true);
+            
+            // Rimuovi elementi che non sono generalmente parte del contenuto
+            const elementsToRemove = ['script', 'style', 'nav', 'header', 'footer', 'aside', 'iframe', 'form', '.comments', '.sidebar', '.ad', '.advertisement', '.banner'];
+            elementsToRemove.forEach(selector => {
+                const elements = clone.querySelectorAll(selector);
+                elements.forEach(el => el.remove());
+            });
+            
+            // Estrai il testo formattato mantenendo paragrafi e titoli
+            let result = '';
+            const contentElements = clone.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote');
+            
+            contentElements.forEach(el => {
+                const tagName = el.tagName.toLowerCase();
+                const text = el.textContent.trim();
+                
+                if (text.length > 0) {
+                    if (tagName.startsWith('h')) {
+                        result += `<${tagName}>${text}</${tagName}>`;
+                    } else if (tagName === 'li') {
+                        result += `<li>${text}</li>`;
+                    } else if (tagName === 'blockquote') {
+                        result += `<blockquote>${text}</blockquote>`;
+                    } else {
+                        result += `<p>${text}</p>`;
+                    }
+                }
+            });
+            
+            // Se non ci sono elementi formattati, prendi tutto il testo
+            if (result.trim() === '') {
+                result = `<p>${clone.textContent.trim().replace(/[\n\r]+/g, '</p><p>').replace(/\s{2,}/g, ' ')}</p>`;
+            }
+            
+            return result;
+        }
+        
+        // Funzione per popolare il form di modifica
+        function populateEditorForm() {
+            titleInput.value = articleData.title;
+            authorInput.value = articleData.author;
+            sourceInput.value = articleData.source;
+            sourceUrlInput.value = articleData.sourceUrl;
+            contentInput.value = articleData.content.replace(/<\/?[^>]+(>|$)/g, '\n');
+            
+            // Popola il container delle immagini
+            imagesContainer.innerHTML = '';
+            
+            articleData.images.forEach((image, index) => {
+                const imageItem = document.createElement('div');
+                imageItem.className = 'image-item';
+                
+                const img = document.createElement('img');
+                img.src = image.src;
+                img.alt = image.alt;
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'image-checkbox';
+                checkbox.checked = image.selected;
+                checkbox.dataset.index = index;
+                checkbox.addEventListener('change', (e) => {
+                    articleData.images[index].selected = e.target.checked;
+                    updatePreview();
+                });
+                
+                imageItem.appendChild(img);
+                imageItem.appendChild(checkbox);
+                imagesContainer.appendChild(imageItem);
+            });
+        }
+        
+        // Funzione per aggiornare l'anteprima
+        function updatePreview() {
+            // Aggiorna i dati dell'articolo dal form
+            articleData.title = titleInput.value;
+            articleData.author = authorInput.value;
+            articleData.source = sourceInput.value;
+            articleData.sourceUrl = sourceUrlInput.value;
+            articleData.content = convertPlainTextToParagraphs(contentInput.value);
+            
+            // Crea l'anteprima
+            let previewHtml = `
+                <div class="preview-title">${articleData.title}</div>
+                <div class="preview-subtitle">
+                    ${articleData.author ? `Di ${articleData.author}` : ''}
+                    ${articleData.author && articleData.source ? ' | ' : ''}
+                    ${articleData.source ? `Fonte: ${articleData.source}` : ''}
+                </div>
+                <div class="preview-divider"></div>
+                <div class="preview-content">
+                    ${articleData.content}
+                </div>
+            `;
+            
+            // Aggiungi le immagini selezionate
+            const selectedImages = articleData.images.filter(img => img.selected);
+            if (selectedImages.length > 0) {
+                selectedImages.forEach(image => {
+                    previewHtml = previewHtml.replace(
+                        /<\/p>(?![^<]*<\/div>)/,
+                        `</p><img src="${image.src}" alt="${image.alt || ''}" style="max-width:100%">`
+                    );
+                });
+            }
+            
+            previewContainer.innerHTML = previewHtml;
+        }
+        
+        // Funzione per convertire testo normale in paragrafi HTML
+        function convertPlainTextToParagraphs(text) {
+            return text
+                .split('\n')
+                .filter(line => line.trim() !== '')
+                .map(line => `<p>${line.trim()}</p>`)
+                .join('');
+        }
+        
+        // Event listener per aggiornare l'anteprima
+        updatePreviewButton.addEventListener('click', updatePreview);
+        
+        // Funzione per esportare in PDF
+        exportPdfButton.addEventListener('click', async () => {
+            try {
+                exportStatus.innerHTML = '<p><i class="ph-spinner icon"></i> Generazione PDF in corso...</p>';
+                
+                // Assicuriamoci che il contenuto sia aggiornato
+                updatePreview();
+                
+                // Crea una copia del contenuto dell'anteprima per il PDF
+                const pdfContent = document.createElement('div');
+                pdfContent.innerHTML = previewContainer.innerHTML;
+                pdfContent.style.width = '210mm'; // Larghezza A4
+                pdfContent.style.padding = '15mm';
+                pdfContent.style.fontSize = '12pt';
+                document.body.appendChild(pdfContent);
+                
+                // Converti le immagini in URL data
+                const images = pdfContent.querySelectorAll('img');
+                for (let img of images) {
+                    try {
+                        const response = await fetch(img.src);
+                        const blob = await response.blob();
+                        const reader = new FileReader();
+                        await new Promise((resolve) => {
+                            reader.onload = () => {
+                                img.src = reader.result;
+                                resolve();
+                            };
+                            reader.readAsDataURL(blob);
+                        });
+                    } catch (err) {
+                        console.warn('Impossibile convertire l\'immagine:', err);
+                    }
+                }
+                
+                // Genera il PDF
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a4'
+                });
+                
+                // Utilizza html2canvas per renderizzare il contenuto HTML
+                const canvas = await html2canvas(pdfContent, {
+                    scale: 2, // Miglior qualità
+                    useCORS: true,
+                    logging: false
+                });
+                
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                
+                // Aggiungi l'immagine al PDF
+                pdf.addImage(
+                    imgData, 'JPEG', 0, 0, 
+                    pdf.internal.pageSize.getWidth(), 
+                    canvas.height * pdf.internal.pageSize.getWidth() / canvas.width
+                );
+                
+                // Rimuovi l'elemento temporaneo
+                document.body.removeChild(pdfContent);
+                
+                // Salva il PDF
+                pdf.save(`${articleData.title.substring(0, 30).replace(/[^\w]/g, '_')}.pdf`);
+                
+                exportStatus.innerHTML = '<p style="color: green;"><i class="ph-check icon"></i> PDF generato con successo!</p>';
+            } catch (error) {
+                console.error('Errore nella generazione del PDF:', error);
+                exportStatus.innerHTML = `<p style="color: red;"><i class="ph-x icon"></i> Errore nella generazione del PDF: ${error.message}</p>`;
+            }
+        });
+        
+        // Funzione per esportare in EPUB
+        exportEpubButton.addEventListener('click', async () => {
+            try {
+                exportStatus.innerHTML = '<p><i class="ph-spinner icon"></i> Generazione EPUB in corso...</p>';
+                
+                // Assicuriamoci che il contenuto sia aggiornato
+                updatePreview();
+                
+                // Crea lo zip file per EPUB
+                const zip = new JSZip();
+                
+                // Aggiungi i file necessari per EPUB
+                
+                // mimetype
+                zip.file("mimetype", "application/epub+zip");
+                
+                // META-INF/container.xml
+                zip.folder("META-INF").file("container.xml", 
+                    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+                    '<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n' +
+                    '  <rootfiles>\n' +
+                    '    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>\n' +
+                    '  </rootfiles>\n' +
+                    '</container>'
+                );
+                
+                // OEBPS folder
+                const oebps = zip.folder("OEBPS");
+                
+                // content.opf
+                let contentOpf = 
+                    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+                    '<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookID" version="2.0">\n' +
+                    '  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">\n' +
+                    `    <dc:title>${escapeXml(articleData.title)}</dc:title>\n` +
+                    `    <dc:creator>${escapeXml(articleData.author || 'Unknown')}</dc:creator>\n` +
+                    '    <dc:language>it</dc:language>\n' +
+                    `    <dc:identifier id="BookID">urn:uuid:${generateUUID()}</dc:identifier>\n` +
+                    '  </metadata>\n' +
+                    '  <manifest>\n' +
+                    'ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>\n' +
+                    '    <item id="content" href="content.html" media-type="application/xhtml+xml"/>\n';
+                
+                // Aggiungi le immagini al manifest
+                const selectedImages = articleData.images.filter(img => img.selected);
+                let imageItems = '';
+                
+                for (let i = 0; i < selectedImages.length; i++) {
+                    const imgFileName = `image_${i + 1}.jpg`;
+                    imageItems += `    <item id="image${i+1}" href="${imgFileName}" media-type="image/jpeg"/>\n`;
+                }
+                
+                contentOpf += imageItems;
+                contentOpf += 
+                    '  </manifest>\n' +
+                    '  <spine toc="ncx">\n' +
+                    '    <itemref idref="content"/>\n' +
+                    '  </spine>\n' +
+                    '</package>';
+                
+                oebps.file("content.opf", contentOpf);
+                
+                // toc.ncx
+                const tocNcx = 
+                    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+                    '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">\n' +
+                    '  <head>\n' +
+                    '    <meta name="dtb:uid" content="urn:uuid:' + generateUUID() + '"/>\n' +
+                    '    <meta name="dtb:depth" content="1"/>\n' +
+                    '  </head>\n' +
+                    `  <docTitle><text>${escapeXml(articleData.title)}</text></docTitle>\n` +
+                    '  <navMap>\n' +
+                    '    <navPoint id="navpoint-1" playOrder="1">\n' +
+                    `      <navLabel><text>${escapeXml(articleData.title)}</text></navLabel>\n` +
+                    '      <content src="content.html"/>\n' +
+                    '    </navPoint>\n' +
+                    '  </navMap>\n' +
+                    '</ncx>';
+                
+                oebps.file("toc.ncx", tocNcx);
+                
+                // content.html
+                let contentHtml = 
+                    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+                    '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n' +
+                    '<html xmlns="http://www.w3.org/1999/xhtml">\n' +
+                    '<head>\n' +
+                    `  <title>${escapeXml(articleData.title)}</title>\n` +
+                    '  <style type="text/css">\n' +
+                    '    body { font-family: serif; text-align: justify; margin: 5%; hyphens: auto; }\n' +
+                    '    h1 { text-align: center; font-size: 1.5em; margin: 1em 0; }\n' +
+                    '    .author { text-align: center; font-style: italic; margin-bottom: 0.5em; }\n' +
+                    '    .source { text-align: center; font-size: 0.9em; margin-bottom: 2em; }\n' +
+                    '    hr { margin: 1em 0; }\n' +
+                    '    p { text-indent: 1.5em; margin: 0.5em 0; }\n' +
+                    '    img { max-width: 100%; display: block; margin: 1em auto; }\n' +
+                    '  </style>\n' +
+                    '</head>\n' +
+                    '<body>\n' +
+                    `  <h1>${escapeXml(articleData.title)}</h1>\n`;
+                
+                if (articleData.author) {
+                    contentHtml += `  <div class="author">Di ${escapeXml(articleData.author)}</div>\n`;
+                }
+                
+                if (articleData.source) {
+                    contentHtml += `  <div class="source">Fonte: ${escapeXml(articleData.source)}</div>\n`;
+                }
+                
+                contentHtml += '  <hr/>\n';
+                
+                // Sostituisci le immagini con i riferimenti locali
+                let contentWithImages = articleData.content;
+                for (let i = 0; i < selectedImages.length; i++) {
+                    const imgFileName = `image_${i + 1}.jpg`;
+                    contentWithImages = contentWithImages.replace(
+                        /<\/p>(?![^<]*<\/div>)/,
+                        `</p><img src="${imgFileName}" alt="Immagine ${i+1}" />`
+                    );
+                }
+                
+                contentHtml += '  <div class="content">\n';
+                contentHtml += contentWithImages;
+                contentHtml += '  </div>\n';
+                contentHtml += '</body>\n</html>';
+                
+                oebps.file("content.html", contentHtml);
+                
+                // Aggiungi le immagini
+                for (let i = 0; i < selectedImages.length; i++) {
+                    try {
+                        const imgFileName = `image_${i + 1}.jpg`;
+                        const response = await fetch(selectedImages[i].src);
+                        const blob = await response.blob();
+                        oebps.file(imgFileName, blob);
+                    } catch (err) {
+                        console.warn('Impossibile aggiungere l\'immagine:', err);
+                    }
+                }
+                
+                // Genera il file EPUB
+                const epubBlob = await zip.generateAsync({type: 'blob', mimeType: 'application/epub+zip'});
+                saveAs(epubBlob, `${articleData.title.substring(0, 30).replace(/[^\w]/g, '_')}.epub`);
+                
+                exportStatus.innerHTML = '<p style="color: green;"><i class="ph-check icon"></i> EPUB generato con successo!</p>';
+            } catch (error) {
+                console.error('Errore nella generazione dell\'EPUB:', error);
+                exportStatus.innerHTML = `<p style="color: red;"><i class="ph-x icon"></i> Errore nella generazione dell'EPUB: ${error.message}</p>`;
+            }
+        });
+        
+        // Funzione per mostrare messaggi di stato
+        function showStatus(message, type = 'info') {
+            statusMessage.textContent = message;
+            statusMessage.className = `status ${type}`;
+            statusMessage.classList.remove('hidden');
+            
+            // Nascondi il messaggio dopo 5 secondi
+            setTimeout(() => {
+                statusMessage.classList.add('hidden');
+            }, 5000);
+        }
+        
+        // Funzione per generare un UUID (per EPUB)
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+        
+        // Funzione per l'escape dei caratteri XML
+        function escapeXml(unsafe) {
+            return unsafe.replace(/[<>&'"]/g, function (c) {
+                switch (c) {
+                    case '<': return '&lt;';
+                    case '>': return '&gt;';
+                    case '&': return '&amp;';
+                    case '\'': return '&apos;';
+                    case '"': return '&quot;';
+                }
+                return c;
+            });
+        }
+    </script>
+</body>
+</html>
