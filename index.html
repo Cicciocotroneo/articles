@@ -779,12 +779,14 @@ max-width: 170mm;
             // Imposta i font
             pdf.setFont('Georgia', 'normal');
             
-            // Aggiungi il titolo
+            /*// Aggiungi il titolo
             pdf.setFontSize(20);
             pdf.text(articleData.title, pageWidth / 2, margin, { align: 'center' });
             
             // Aggiungi il sottotitolo
             let yPosition = margin + 15;
+
+            
             
             if (articleData.author || articleData.source) {
                 pdf.setFontSize(11);
@@ -810,7 +812,49 @@ max-width: 170mm;
             pdf.setDrawColor(200, 200, 200);
             pdf.line(margin, yPosition + 5, pageWidth - margin, yPosition + 5);
             
-            yPosition += 15;
+            yPosition += 15;*/
+
+            // Modifica la parte della funzione exportPdfButton che gestisce il titolo
+// Trova il codice che riguarda l'aggiunta del titolo nel PDF e sostituiscilo con questo:
+
+// Aggiungi il titolo (allineato a sinistra)
+pdf.setFontSize(20);
+// Dividi il titolo in più righe se necessario
+const titleLines = pdf.splitTextToSize(articleData.title, contentWidth);
+// Posiziona il titolo allineato a sinistra
+pdf.text(titleLines, margin, margin);
+
+// Aggiorna la posizione y in base al numero di righe del titolo
+yPosition = margin + (titleLines.length * 10);
+
+// Resto del codice per il sottotitolo...
+if (articleData.author || articleData.source) {
+    pdf.setFontSize(11);
+    let subtitle = '';
+    
+    if (articleData.author) {
+        subtitle += `Di ${articleData.author}`;
+    }
+    
+    if (articleData.author && articleData.source) {
+        subtitle += ' | ';
+    }
+    
+    if (articleData.source) {
+        subtitle += `Fonte: ${articleData.source}`;
+    }
+    
+    // Dividi anche il sottotitolo se necessario
+    const subtitleLines = pdf.splitTextToSize(subtitle, contentWidth);
+    pdf.text(subtitleLines, margin, yPosition);
+    yPosition += subtitleLines.length * 7;
+}
+
+// Aggiungi linea divisoria
+pdf.setDrawColor(200, 200, 200);
+pdf.line(margin, yPosition + 5, pageWidth - margin, yPosition + 5);
+
+yPosition += 15;
             
             // Ottieni il contenuto dell'articolo
             const contentDiv = document.createElement('div');
