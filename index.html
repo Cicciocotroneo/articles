@@ -928,10 +928,78 @@ max-width: 170mm;
         }
         
         // Funzione per esportare in PDF
-        exportPdfButton.addEventListener('click', async () => {
-            try {
-                exportStatus.innerHTML = '<p><i class="ph-spinner icon"></i> Generazione PDF in corso...</p>';
-                
+      exportPdfButton.addEventListener('click', async () => {
+    try {
+        exportStatus.innerHTML = '<p><i class="ph-spinner icon"></i> Generazione PDF in corso...</p>';
+        
+        // Assicuriamoci che il contenuto sia aggiornato
+        updatePreview();
+        
+        // Crea un nuovo documento PDF
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4',
+            compress: true
+        });
+        
+        // Imposta margini predefiniti
+        const margin = 20; // margine di 20mm su tutti i lati
+        const pageWidth = 210;
+        const pageHeight = 297;
+        const contentWidth = pageWidth - (margin * 2);
+        
+        // Imposta i font
+        pdf.setFont('Helvetica', 'normal');
+        
+        // Aggiungi il titolo con allineamento a sinistra e gestione del ritorno a capo
+        pdf.setFontSize(16);
+        const titleLines = pdf.splitTextToSize(articleData.title, contentWidth);
+        let yPosition = margin;
+        
+        // Aggiungi ogni riga del titolo
+        for (let i = 0; i < titleLines.length; i++) {
+            pdf.text(titleLines[i], margin, yPosition);
+            yPosition += 8; // Spazio tra le righe del titolo
+        }
+        
+        // Aggiungi spazio dopo il titolo
+        yPosition += 5;
+        
+        // Aggiungi il sottotitolo, anche questo allineato a sinistra
+        if (articleData.author || articleData.source) {
+            pdf.setFontSize(11);
+            let subtitle = '';
+            
+            if (articleData.author) {
+                subtitle += `Di ${articleData.author}`;
+            }
+            
+            if (articleData.author && articleData.source) {
+                subtitle += ' | ';
+            }
+            
+            if (articleData.source) {
+                subtitle += `Fonte: ${articleData.source}`;
+            }
+            
+            const subtitleLines = pdf.splitTextToSize(subtitle, contentWidth);
+            
+            // Aggiungi ogni riga del sottotitolo
+            for (let i = 0; i < subtitleLines.length; i++) {
+                pdf.text(subtitleLines[i], margin, yPosition);
+                yPosition += 5; // Spazio tra le righe del sottotitolo
+            }
+            
+            yPosition += 2;
+        }
+        
+        // Aggiungi linea divisoria
+        pdf.setDrawColor(200, 200, 200);
+        pdf.line(margin, yPosition + 2, pageWidth - margin, yPosition + 2);
+        
+        yPosition += 10;
                 // Assicuriamoci che il contenuto sia aggiornato
                 updatePreview();
                 
@@ -947,6 +1015,8 @@ max-width: 170mm;
                 exportStatus.innerHTML = `<p style="color: red;"><i class="ph-x icon"></i> Errore nella generazione del PDF: ${error.message}</p>`;
             }
         });
+
+        
         
         // Funzione per esportare in EPUB
         exportEpubButton.addEventListener('click', async () => {
